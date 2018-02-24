@@ -26,9 +26,9 @@
 #define PACKAGE "dsopenalpr"
 #define VERSION "1.0"
 #define LICENSE "Proprietary"
-#define DESCRIPTION "NVIDIA example plugin for integration with DeepStream on Jetson"
-#define BINARY_PACKAGE "NVIDIA DeepStream 3rdparty IP integration example plugin"
-#define URL "http://nvidia.com/"
+#define DESCRIPTION "OpenALPR plugin for integration with DeepStream on Jetson"
+#define BINARY_PACKAGE "DeepStream 3rdparty OpenALPR plugin"
+#define URL "http://www.openalpr.com/"
 
 
 G_BEGIN_DECLS
