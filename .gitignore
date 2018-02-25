@@ -1,3 +1,5 @@
 *.a
 *.o
 *.so
+nbproject/
+*.swp
