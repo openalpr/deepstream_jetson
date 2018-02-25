@@ -10,9 +10,9 @@
 ################################################################################
 
 CXX := g++
-SRCS := gstdsopenalpr.cpp
-INCS:= $(wildcard *.h)
-LIB:=libgstnvdsopenalpr.so
+SRCS := gstdsexample.cpp
+INCS:= $(wildcard *.h) 
+LIB:=libgstnvdsexample.so
 
 DEP:=dsopenalpr_lib/libdsopenalpr.a
 DEP_FILES:=$(wildcard dsopenalpr_lib/*)
@@ -20,14 +20,16 @@ DEP_FILES-=$(DEP)
 
 CFLAGS := -fPIC
 LIBS := -shared -L/usr/lib/aarch64-linux-gnu/tegra -lnvbuf_utils -lgstnvivameta \
-  -Wl,-no-undefined -L dsopenalpr_lib -ldsopenalpr -lEGL
+  -Wl,-no-undefined -L dsopenalpr_lib -ldsopenalpr -lEGL \
+  -lalprstream -lopenalpr -lvehicleclassifier -lalpropencvgpu
 
 CFLAGS+= \
-  -I../nvgstiva-app_sources/nvgstiva-app/includes
+  -I../nvgstiva-app_sources/nvgstiva-app/includes \
+  -I/usr/include/alpropencvgpu/
 
 OBJS:= $(SRCS:.cpp=.o)
 
-PKGS:= gstreamer-1.0 gstreamer-base-1.0 gstreamer-video-1.0 opencv
+PKGS:= gstreamer-1.0 gstreamer-base-1.0 gstreamer-video-1.0 
 CFLAGS+=$(shell pkg-config --cflags $(PKGS))
 LIBS+=$(shell pkg-config --libs $(PKGS))
 

@@ -10,16 +10,19 @@
  */
 
 #include <string.h>
-#include "gstdsopenalpr.h"
+#include "gstdsexample.h"
 
 #include <sys/time.h>
+#include <iostream>
 
 #define USE_EGLIMAGE 1
 
-GST_DEBUG_CATEGORY_STATIC (gst_dsopenalpr_debug);
-#define GST_CAT_DEFAULT gst_dsopenalpr_debug
+GST_DEBUG_CATEGORY_STATIC (gst_dsexample_debug);
+#define GST_CAT_DEFAULT gst_dsexample_debug
 
 static GQuark _ivameta_quark = 0;
+
+using namespace alprcvgpu;
 
 /* Enum to identify properties */
 enum
@@ -40,7 +43,7 @@ enum
 /* By default NVIDIA Hardware allocated memory flows through the pipeline. We
  * will be processing on this type of memory only. */
 #define GST_CAPS_FEATURE_MEMORY_NVMM "memory:NVMM"
-static GstStaticPadTemplate gst_dsopenalpr_sink_template =
+static GstStaticPadTemplate gst_dsexample_sink_template =
 GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
@@ -48,7 +51,7 @@ GST_STATIC_PAD_TEMPLATE ("sink",
         (GST_CAPS_FEATURE_MEMORY_NVMM,
             "{ NV12 }")));
 
-static GstStaticPadTemplate gst_dsopenalpr_src_template =
+static GstStaticPadTemplate gst_dsexample_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
@@ -57,26 +60,26 @@ GST_STATIC_PAD_TEMPLATE ("src",
             "{ NV12 }")));
 
 /* Define our element type. Standard GObject/GStreamer boilerplate stuff */
-#define gst_dsopenalpr_parent_class parent_class
-G_DEFINE_TYPE (GstDsOpenalpr, gst_dsopenalpr, GST_TYPE_BASE_TRANSFORM);
+#define gst_dsexample_parent_class parent_class
+G_DEFINE_TYPE (GstDsExample, gst_dsexample, GST_TYPE_BASE_TRANSFORM);
 
-static void gst_dsopenalpr_set_property (GObject * object, guint prop_id,
+static void gst_dsexample_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
-static void gst_dsopenalpr_get_property (GObject * object, guint prop_id,
+static void gst_dsexample_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 
-static gboolean gst_dsopenalpr_set_caps (GstBaseTransform * btrans,
+static gboolean gst_dsexample_set_caps (GstBaseTransform * btrans,
     GstCaps * incaps, GstCaps * outcaps);
-static gboolean gst_dsopenalpr_start (GstBaseTransform * btrans);
-static gboolean gst_dsopenalpr_stop (GstBaseTransform * btrans);
+static gboolean gst_dsexample_start (GstBaseTransform * btrans);
+static gboolean gst_dsexample_stop (GstBaseTransform * btrans);
 
-static GstFlowReturn gst_dsopenalpr_transform_ip (GstBaseTransform *
+static GstFlowReturn gst_dsexample_transform_ip (GstBaseTransform *
     btrans, GstBuffer * inbuf);
 
 static void
-attach_metadata_full_frame (GstDsOpenalpr * dsopenalpr, GstBuffer * inbuf,
+attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     gdouble scale_ratio, DsOpenalprOutput * output);
-static void attach_metadata_object (GstDsOpenalpr * dsopenalpr,
+static void attach_metadata_object (GstDsExample * dsexample,
     ROIMeta_Params * roi_meta, DsOpenalprOutput * output);
 
 /* Install properties, set sink and src pad capabilities, override the required
@@ -84,7 +87,7 @@ static void attach_metadata_object (GstDsOpenalpr * dsopenalpr,
  * element.
  */
 static void
-gst_dsopenalpr_class_init (GstDsOpenalprClass * klass)
+gst_dsexample_class_init (GstDsExampleClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
@@ -95,15 +98,15 @@ gst_dsopenalpr_class_init (GstDsOpenalprClass * klass)
   gstbasetransform_class = (GstBaseTransformClass *) klass;
 
   /* Overide base class functions */
-  gobject_class->set_property = GST_DEBUG_FUNCPTR (gst_dsopenalpr_set_property);
-  gobject_class->get_property = GST_DEBUG_FUNCPTR (gst_dsopenalpr_get_property);
+  gobject_class->set_property = GST_DEBUG_FUNCPTR (gst_dsexample_set_property);
+  gobject_class->get_property = GST_DEBUG_FUNCPTR (gst_dsexample_get_property);
 
-  gstbasetransform_class->set_caps = GST_DEBUG_FUNCPTR (gst_dsopenalpr_set_caps);
-  gstbasetransform_class->start = GST_DEBUG_FUNCPTR (gst_dsopenalpr_start);
-  gstbasetransform_class->stop = GST_DEBUG_FUNCPTR (gst_dsopenalpr_stop);
+  gstbasetransform_class->set_caps = GST_DEBUG_FUNCPTR (gst_dsexample_set_caps);
+  gstbasetransform_class->start = GST_DEBUG_FUNCPTR (gst_dsexample_start);
+  gstbasetransform_class->stop = GST_DEBUG_FUNCPTR (gst_dsexample_stop);
 
   gstbasetransform_class->transform_ip =
-      GST_DEBUG_FUNCPTR (gst_dsopenalpr_transform_ip);
+      GST_DEBUG_FUNCPTR (gst_dsexample_transform_ip);
 
   /* Install properties */
   g_object_class_install_property (gobject_class, PROP_UNIQUE_ID,
@@ -132,22 +135,22 @@ gst_dsopenalpr_class_init (GstDsOpenalprClass * klass)
 
   /* Set sink and src pad capabilities */
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&gst_dsopenalpr_src_template));
+      gst_static_pad_template_get (&gst_dsexample_src_template));
   gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&gst_dsopenalpr_sink_template));
+      gst_static_pad_template_get (&gst_dsexample_sink_template));
 
   /* Set metadata describing the element */
   gst_element_class_set_details_simple (gstelement_class,
-      "DsOpenalpr plugin",
-      "DsOpenalpr Plugin",
+      "DsExample plugin",
+      "DsExample Plugin",
       "Process a 3rdparty example algorithm on objects / full frame",
       "Shaunak Gupte <shaunakg@nvidia.com>");
 }
 
 static void
-gst_dsopenalpr_init (GstDsOpenalpr * dsopenalpr)
+gst_dsexample_init (GstDsExample * dsexample)
 {
-  GstBaseTransform *btrans = GST_BASE_TRANSFORM (dsopenalpr);
+  GstBaseTransform *btrans = GST_BASE_TRANSFORM (dsexample);
 
   /* We will not be generating a new buffer. Just adding / updating
    * metadata. */
@@ -157,10 +160,10 @@ gst_dsopenalpr_init (GstDsOpenalpr * dsopenalpr)
   gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (btrans), TRUE);
 
   /* Initialize all property variables to default values */
-  dsopenalpr->unique_id = DEFAULT_UNIQUE_ID;
-  dsopenalpr->processing_width = DEFAULT_PROCESSING_WIDTH;
-  dsopenalpr->processing_height = DEFAULT_PROCESSING_HEIGHT;
-  dsopenalpr->process_full_frame = DEFAULT_PROCESS_FULL_FRAME;
+  dsexample->unique_id = DEFAULT_UNIQUE_ID;
+  dsexample->processing_width = DEFAULT_PROCESSING_WIDTH;
+  dsexample->processing_height = DEFAULT_PROCESSING_HEIGHT;
+  dsexample->process_full_frame = DEFAULT_PROCESS_FULL_FRAME;
 
   /* This quark is required to identify IvaMeta when iterating through
    * the buffer metadatas */
@@ -171,22 +174,22 @@ gst_dsopenalpr_init (GstDsOpenalpr * dsopenalpr)
 /* Function called when a property of the element is set. Standard boilerplate.
  */
 static void
-gst_dsopenalpr_set_property (GObject * object, guint prop_id,
+gst_dsexample_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstDsOpenalpr *dsopenalpr = GST_DSOPENALPR (object);
+  GstDsExample *dsexample = GST_DSEXAMPLE (object);
   switch (prop_id) {
     case PROP_UNIQUE_ID:
-      dsopenalpr->unique_id = g_value_get_uint (value);
+      dsexample->unique_id = g_value_get_uint (value);
       break;
     case PROP_PROCESSING_WIDTH:
-      dsopenalpr->processing_width = g_value_get_int (value);
+      dsexample->processing_width = g_value_get_int (value);
       break;
     case PROP_PROCESSING_HEIGHT:
-      dsopenalpr->processing_height = g_value_get_int (value);
+      dsexample->processing_height = g_value_get_int (value);
       break;
     case PROP_PROCESS_FULL_FRAME:
-      dsopenalpr->process_full_frame = g_value_get_boolean (value);
+      dsexample->process_full_frame = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -198,23 +201,23 @@ gst_dsopenalpr_set_property (GObject * object, guint prop_id,
  * boilerplate.
  */
 static void
-gst_dsopenalpr_get_property (GObject * object, guint prop_id,
+gst_dsexample_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstDsOpenalpr *dsopenalpr = GST_DSOPENALPR (object);
+  GstDsExample *dsexample = GST_DSEXAMPLE (object);
 
   switch (prop_id) {
     case PROP_UNIQUE_ID:
-      g_value_set_uint (value, dsopenalpr->unique_id);
+      g_value_set_uint (value, dsexample->unique_id);
       break;
     case PROP_PROCESSING_WIDTH:
-      g_value_set_int (value, dsopenalpr->processing_width);
+      g_value_set_int (value, dsexample->processing_width);
       break;
     case PROP_PROCESSING_HEIGHT:
-      g_value_set_int (value, dsopenalpr->processing_height);
+      g_value_set_int (value, dsexample->processing_height);
       break;
     case PROP_PROCESS_FULL_FRAME:
-      g_value_set_boolean (value, dsopenalpr->process_full_frame);
+      g_value_set_boolean (value, dsexample->process_full_frame);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -226,39 +229,50 @@ gst_dsopenalpr_get_property (GObject * object, guint prop_id,
  * Initialize all resources and start the output thread
  */
 static gboolean
-gst_dsopenalpr_start (GstBaseTransform * btrans)
+gst_dsexample_start (GstBaseTransform * btrans)
 {
-  GstDsOpenalpr *dsopenalpr = GST_DSOPENALPR (btrans);
+  const char* OPENALPR_COUNTRY = "us";
+  const char* OPENALPR_CONFIG_FILE = ""; // empty uses default /etc/openalpr/openalpr.conf
+  const char* OPENALPR_RUNTIME_DIR = ""; // empty uses default /usr/share/openalpr/runtime_data/
+  const char* OPENALPR_LICENSE_KEY = ""; // empty reads value from file in /etc/openalpr/license.conf
+  int OPENALPR_RECOGNIZE_VEHICLES = 1;
+  int OPENALPR_GROUP_PLATES_ACROSS_FRAMES = 1;
+  
+  GstDsExample *dsexample = GST_DSEXAMPLE (btrans);
   DsOpenalprInitParams init_params =
-      { dsopenalpr->processing_width, dsopenalpr->processing_height,
-    dsopenalpr->process_full_frame
-  };
+    { 
+      dsexample->processing_width, dsexample->processing_height, 
+      3,
+      OPENALPR_COUNTRY, OPENALPR_CONFIG_FILE, OPENALPR_RUNTIME_DIR, 
+      OPENALPR_LICENSE_KEY,
+      OPENALPR_RECOGNIZE_VEHICLES, OPENALPR_GROUP_PLATES_ACROSS_FRAMES
+    };
 
   /* Algorithm specific initializations and resource allocation. */
-  dsopenalpr->dsopenalprlib_ctx = DsOpenalprCtx_Init (&init_params);
+  dsexample->dsexamplelib_ctx = DsOpenalprCtx_Init (&init_params);
 
   /* Create a scratch buffer to scale frames or crop and scale objects. In case
    * of full frame processing, even if color conversion and scaling is not
    * required (i.e. frame resolution, color format = processing resolution,
    * color format), this is conversion required since the buffer layout might
    * not be understood by the algorithm. */
-  if (NvBufferCreate (&dsopenalpr->conv_dmabuf_fd, dsopenalpr->processing_width,
-      dsopenalpr->processing_height, NvBufferLayout_Pitch,
+  if (NvBufferCreate (&dsexample->conv_dmabuf_fd, dsexample->processing_width,
+      dsexample->processing_height, NvBufferLayout_Pitch,
       NvBufferColorFormat_ABGR32) != 0)
     goto error;
 
-  dsopenalpr->cvmat =
-      new cv::Mat (cv::Size (dsopenalpr->processing_height,
-          dsopenalpr->processing_width), CV_8UC3);
-  if (!dsopenalpr->cvmat)
+  dsexample->cvmat =
+      new Mat (Size (dsexample->processing_height,
+          dsexample->processing_width), CV_8UC3);
+  if (!dsexample->cvmat)
     goto error;
 
   return TRUE;
 error:
-  if (dsopenalpr->conv_dmabuf_fd)
-    NvBufferDestroy (dsopenalpr->conv_dmabuf_fd);
-  if (dsopenalpr->dsopenalprlib_ctx)
-    DsOpenalprCtx_Deinit (dsopenalpr->dsopenalprlib_ctx);
+  if (dsexample->conv_dmabuf_fd)
+    NvBufferDestroy (dsexample->conv_dmabuf_fd);
+  if (dsexample->dsexamplelib_ctx)
+    DsOpenalprCtx_Deinit (dsexample->dsexamplelib_ctx);
   return FALSE;
 }
 
@@ -266,16 +280,16 @@ error:
  * Stop the output thread and free up all the resources
  */
 static gboolean
-gst_dsopenalpr_stop (GstBaseTransform * btrans)
+gst_dsexample_stop (GstBaseTransform * btrans)
 {
-  GstDsOpenalpr *dsopenalpr = GST_DSOPENALPR (btrans);
+  GstDsExample *dsexample = GST_DSEXAMPLE (btrans);
 
-  NvBufferDestroy (dsopenalpr->conv_dmabuf_fd);
+  NvBufferDestroy (dsexample->conv_dmabuf_fd);
 
-  delete dsopenalpr->cvmat;
+  delete dsexample->cvmat;
 
   // Deinit the algorithm library
-  DsOpenalprCtx_Deinit (dsopenalpr->dsopenalprlib_ctx);
+  DsOpenalprCtx_Deinit (dsexample->dsexamplelib_ctx);
 
   return TRUE;
 }
@@ -284,13 +298,13 @@ gst_dsopenalpr_stop (GstBaseTransform * btrans)
  * Called when source / sink pad capabilities have been negotiated.
  */
 static gboolean
-gst_dsopenalpr_set_caps (GstBaseTransform * btrans, GstCaps * incaps,
+gst_dsexample_set_caps (GstBaseTransform * btrans, GstCaps * incaps,
     GstCaps * outcaps)
 {
-  GstDsOpenalpr *dsopenalpr = GST_DSOPENALPR (btrans);
+  GstDsExample *dsexample = GST_DSEXAMPLE (btrans);
 
   /* Save the input video information, since this will be required later. */
-  gst_video_info_from_caps (&dsopenalpr->video_info, incaps);
+  gst_video_info_from_caps (&dsexample->video_info, incaps);
 
   return TRUE;
 }
@@ -303,14 +317,14 @@ gst_dsopenalpr_set_caps (GstBaseTransform * btrans, GstCaps * incaps,
  * padded data and/or can work with RGBA.
  */
 static GstFlowReturn
-get_converted_mat (GstDsOpenalpr * dsopenalpr, int in_dmabuf_fd,
-    NvOSD_RectParams * crop_rect_params, cv::Mat & out_mat, gdouble & ratio)
+get_converted_mat (GstDsExample * dsexample, int in_dmabuf_fd,
+    NvOSD_RectParams * crop_rect_params, Mat & out_mat, gdouble & ratio)
 {
   NvBufferParams buf_params;
   NvBufferCompositeParams composite_params;
   gpointer mapped_ptr = NULL;
   GstFlowReturn flow_ret = GST_FLOW_OK;
-  cv::Mat in_mat;
+  Mat in_mat;
 
   // Get buffer parameters of the input buffer
   if (NvBufferGetParams (in_dmabuf_fd, &buf_params) != 0) {
@@ -319,8 +333,8 @@ get_converted_mat (GstDsOpenalpr * dsopenalpr, int in_dmabuf_fd,
   }
 
   // Calculate scaling ratio while maintaining aspect ratio
-  ratio = MIN (1.0 * dsopenalpr->processing_width / crop_rect_params->width,
-      1.0 * dsopenalpr->processing_height / crop_rect_params->height);
+  ratio = MIN (1.0 * dsexample->processing_width / crop_rect_params->width,
+      1.0 * dsexample->processing_height / crop_rect_params->height);
 
   if (ratio < 1.0 / 16 || ratio > 16.0) {
     // Currently cannot scale by ratio > 16 or < 1/16
@@ -353,28 +367,28 @@ get_converted_mat (GstDsOpenalpr * dsopenalpr, int in_dmabuf_fd,
   composite_params.composite_flag = NVBUFFER_COMPOSITE;
 
   // Actually perform the cropping, scaling
-  if (NvBufferComposite (&in_dmabuf_fd, dsopenalpr->conv_dmabuf_fd,
+  if (NvBufferComposite (&in_dmabuf_fd, dsexample->conv_dmabuf_fd,
           &composite_params)) {
     flow_ret = GST_FLOW_ERROR;
     goto done;
   }
 
   // Get the scratch buffer params. We need the pitch of the buffer
-  if (NvBufferGetParams (dsopenalpr->conv_dmabuf_fd, &buf_params) != 0) {
+  if (NvBufferGetParams (dsexample->conv_dmabuf_fd, &buf_params) != 0) {
     flow_ret = GST_FLOW_ERROR;
     goto done;
   }
   // Map the buffer so that it can be accessed by CPU
-  if (NvBufferMemMap (dsopenalpr->conv_dmabuf_fd, 0, NvBufferMem_Read, &mapped_ptr) != 0) {
+  if (NvBufferMemMap (dsexample->conv_dmabuf_fd, 0, NvBufferMem_Read, &mapped_ptr) != 0) {
     flow_ret = GST_FLOW_ERROR;
     goto done;
   }
   // Use openCV to remove padding and convert RGBA to RGB. Can be skipped if
   // algorithm can handle padded RGBA data.
   in_mat =
-      cv::Mat (dsopenalpr->processing_height, dsopenalpr->processing_width,
+      Mat (dsexample->processing_height, dsexample->processing_width,
       CV_8UC4, mapped_ptr, buf_params.pitch[0]);
-  cv::cvtColor (in_mat, out_mat, CV_BGRA2BGR);
+  cvtColor (in_mat, out_mat, CV_BGRA2BGR);
 
   // To use the converted buffer in CUDA, create an EGLImage and then use
   // CUDA-EGL interop APIs
@@ -392,7 +406,7 @@ get_converted_mat (GstDsOpenalpr * dsopenalpr, int in_dmabuf_fd,
     }
 
     // Create an EGLImage from the FD
-    egl_image = NvEGLImageFromFd (egl_display, dsopenalpr->conv_dmabuf_fd);
+    egl_image = NvEGLImageFromFd (egl_display, dsexample->conv_dmabuf_fd);
     if (!egl_image) {
       flow_ret = GST_FLOW_ERROR;
       goto done;
@@ -407,7 +421,7 @@ get_converted_mat (GstDsOpenalpr * dsopenalpr, int in_dmabuf_fd,
 
 done:
   if (mapped_ptr)
-    NvBufferMemUnMap (dsopenalpr->conv_dmabuf_fd, 0, &mapped_ptr);
+    NvBufferMemUnMap (dsexample->conv_dmabuf_fd, 0, &mapped_ptr);
   return flow_ret;
 }
 
@@ -415,9 +429,9 @@ done:
  * Called when element recieves an input buffer from upstream element.
  */
 static GstFlowReturn
-gst_dsopenalpr_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
+gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
 {
-  GstDsOpenalpr *dsopenalpr = GST_DSOPENALPR (btrans);
+  GstDsExample *dsexample = GST_DSEXAMPLE (btrans);
   GstMapInfo in_map_info;
   GstFlowReturn flow_ret = GST_FLOW_OK;
   gdouble scale_ratio;
@@ -425,9 +439,9 @@ gst_dsopenalpr_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
 
   int in_dmabuf_fd = 0;
 
-  cv::Mat in_mat;
+  Mat in_mat;
 
-  dsopenalpr->frame_num++;
+  dsexample->frame_num++;
 
   memset (&in_map_info, 0, sizeof (in_map_info));
 
@@ -441,28 +455,30 @@ gst_dsopenalpr_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
     goto done;
   }
 
-  if (dsopenalpr->process_full_frame) {
+  if (dsexample->process_full_frame) {
     NvOSD_RectParams rect_params;
     // Scale the entire frame to processing resolution
     rect_params.left = 0;
     rect_params.top = 0;
-    rect_params.width = dsopenalpr->video_info.width;
-    rect_params.height = dsopenalpr->video_info.height;
+    rect_params.width = dsexample->video_info.width;
+    rect_params.height = dsexample->video_info.height;
 
-    if (get_converted_mat (dsopenalpr, in_dmabuf_fd, &rect_params,
-            *dsopenalpr->cvmat, scale_ratio) != GST_FLOW_OK) {
+    if (get_converted_mat (dsexample, in_dmabuf_fd, &rect_params,
+            *dsexample->cvmat, scale_ratio) != GST_FLOW_OK) {
       flow_ret = GST_FLOW_ERROR;
       goto done;
     }
+    imwrite("/tmp/blah.jpg", *dsexample->cvmat);
     // Queue the converted buffer for processing
-    DsOpenalpr_QueueInput (dsopenalpr->dsopenalprlib_ctx, dsopenalpr->cvmat->data);
+    DsOpenalpr_QueueInput (dsexample->dsexamplelib_ctx, dsexample->cvmat->data);
     // Dequeue the output
-    output = DsOpenalpr_DequeueOutput (dsopenalpr->dsopenalprlib_ctx);
+    output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
     // Attach the metadata for the full frame
-    attach_metadata_full_frame (dsopenalpr, inbuf, scale_ratio, output);
+    attach_metadata_full_frame (dsexample, inbuf, scale_ratio, output);
     g_free (output);
 
-  } else {
+  } 
+  else {
     // Using object crops as input to the algorithm. The objects are detected by
     // the primary detector
     GstMeta *gst_meta;
@@ -493,17 +509,17 @@ gst_dsopenalpr_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
         ROIMeta_Params *roi_meta = &bbparams->roi_meta[i];
 
         // Crop and scale the object
-        if (get_converted_mat (dsopenalpr, in_dmabuf_fd, &roi_meta->rect_params,
-                *dsopenalpr->cvmat, scale_ratio) != GST_FLOW_OK) {
+        if (get_converted_mat (dsexample, in_dmabuf_fd, &roi_meta->rect_params,
+                *dsexample->cvmat, scale_ratio) != GST_FLOW_OK) {
           continue;
         }
         // Queue the object crop for processing
-        DsOpenalpr_QueueInput (dsopenalpr->dsopenalprlib_ctx,
-            dsopenalpr->cvmat->data);
+        DsOpenalpr_QueueInput (dsexample->dsexamplelib_ctx,
+            dsexample->cvmat->data);
         // Dequeue the output
-        output = DsOpenalpr_DequeueOutput (dsopenalpr->dsopenalprlib_ctx);
+        output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
         // Attach labels for the object
-        attach_metadata_object (dsopenalpr, roi_meta, output);
+        attach_metadata_object (dsexample, roi_meta, output);
         g_free (output);
       }
     }
@@ -534,15 +550,18 @@ free_iva_meta (gpointer meta_data)
  * Attach metadata for the full frame. We will be adding a new metadata.
  */
 static void
-attach_metadata_full_frame (GstDsOpenalpr * dsopenalpr, GstBuffer * inbuf,
+attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     gdouble scale_ratio, DsOpenalprOutput * output)
 {
+
+  std::cout << "Attaching metadata" << std::endl;
+
   IvaMeta *ivameta;
   BBOX_Params *bbparams = (BBOX_Params *) g_malloc0 (sizeof (BBOX_Params));
   // Allocate an array of size equal to the number of objects detected
   bbparams->roi_meta =
       (ROIMeta_Params *) g_malloc0 (sizeof (ROIMeta_Params) *
-      output->num_objects);
+      output->frame_results.size());
   // Should be set to 3 for custom elements
   bbparams->gie_type = 3;
   // Use HW for overlaying boxes
@@ -550,16 +569,31 @@ attach_metadata_full_frame (GstDsOpenalpr * dsopenalpr, GstBuffer * inbuf,
   // Font to be used for label text
   static gchar font_name[] = "Arial";
 
-  for (gint i = 0; i < output->num_objects; i++) {
-    DsOpenalpr_Object *obj = &output->object[i];
+  // This example app always assumes batch size of 1, so we iterate over the first (and only) frame
+  
+  for (gint i = 0; i < output->frame_results[0].plates.size(); i++) {
+    alpr::AlprPlateResult alpr_plate = output->frame_results[0].plates[i];
+    
     NvOSD_RectParams & rect_params = bbparams->roi_meta[i].rect_params;
     NvOSD_TextParams & text_params = bbparams->roi_meta[i].text_params;
 
+    // Compute a rectangular box that fully covers the plate coordinates
+    // plate points are topleft, top right, bottom right, bottom left
+    // Expand the box by 5%
+    float MULTIPLIER = 0.05;
+    int left = std::min(alpr_plate.plate_points[0].x, alpr_plate.plate_points[3].x);
+    left -= (int) (((float)left) * MULTIPLIER);
+    int top = std::min(alpr_plate.plate_points[0].y, alpr_plate.plate_points[1].x);
+    top -= (int) (((float)top) * MULTIPLIER);
+    int width = (int) (float(alpr_plate.plate_points[1].x - alpr_plate.plate_points[0].x) * (1 + 2*MULTIPLIER));
+    int height = (int) (float(alpr_plate.plate_points[2].y - alpr_plate.plate_points[1].y) * (1 + 2*MULTIPLIER));
+    
+    
     // Assign bounding box coordinates
-    rect_params.left = obj->left;
-    rect_params.top = obj->top;
-    rect_params.width = obj->width;
-    rect_params.height = obj->height;
+    rect_params.left = left;
+    rect_params.top = top;
+    rect_params.width = width;
+    rect_params.height = height;
 
     // Semi-transparent yellow background
     rect_params.has_bg_color = 0;
@@ -580,7 +614,7 @@ attach_metadata_full_frame (GstDsOpenalpr * dsopenalpr, GstBuffer * inbuf,
     bbparams->num_rects++;
 
     // display_text required heap allocated memory
-    text_params.display_text = g_strdup (obj->label);
+    text_params.display_text = g_strdup (alpr_plate.bestPlate.characters.c_str());
     // Display text above the left top corner of the object
     text_params.x_offset = rect_params.left;
     text_params.y_offset = rect_params.top - 10;
@@ -607,38 +641,44 @@ attach_metadata_full_frame (GstDsOpenalpr * dsopenalpr, GstBuffer * inbuf,
  * We assume only one label per object is generated
  */
 static void
-attach_metadata_object (GstDsOpenalpr * dsopenalpr, ROIMeta_Params * roi_meta,
+attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
     DsOpenalprOutput * output)
 {
-  if (output->num_objects == 0)
+  if (output->frame_results.size() == 0 || output->frame_results[0].plates.size() == 0)
     return;
 
   // has_new_info should be set to TRUE whenever adding new/updating
   // information to LabelInfo
   roi_meta->has_new_info = TRUE;
-  // Update the approriate element of the label_info array. Application knows
+  
+  // The assumption is that there is a single plate on this cropped object (e.g., a single vehicle)
+  // however, this is not always true, because some vehicles may have multiple plates (e.g., European trucks)
+  // and sometimes there are false positives, so you could have the true plate read along with a bad one
+  // Simply taking the most confident result may be a sufficient, simple approach.
+  
+  // Update the appropriate element of the label_info array. Application knows
   // that output of this element is available at index "unique_id".
-  strcpy (roi_meta->label_info[dsopenalpr->unique_id].str_label,
-      output->object[0].label);
+  strcpy (roi_meta->label_info[dsexample->unique_id].str_label,
+      output->frame_results[0].plates[0].bestPlate.characters.c_str());
   // is_str_label should be set to TRUE indicating that above str_label field is
   // valid
-  roi_meta->label_info[dsopenalpr->unique_id].is_str_label = 1;
+  roi_meta->label_info[dsexample->unique_id].is_str_label = 1;
 }
 
 /**
  * Boiler plate for registering a plugin and an element.
  */
 static gboolean
-dsopenalpr_plugin_init (GstPlugin * plugin)
+dsexample_plugin_init (GstPlugin * plugin)
 {
-  GST_DEBUG_CATEGORY_INIT (gst_dsopenalpr_debug, "dsopenalpr", 0,
-      "dsopenalpr plugin");
+  GST_DEBUG_CATEGORY_INIT (gst_dsexample_debug, "dsexample", 0,
+      "dsexample plugin");
 
-  return gst_element_register (plugin, "dsopenalpr", GST_RANK_PRIMARY,
-      GST_TYPE_DSOPENALPR);
+  return gst_element_register (plugin, "dsexample", GST_RANK_PRIMARY,
+      GST_TYPE_DSEXAMPLE);
 }
 
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    dsopenalpr,
-    DESCRIPTION, dsopenalpr_plugin_init, VERSION, LICENSE, BINARY_PACKAGE, URL)
+    dsexample,
+    DESCRIPTION, dsexample_plugin_init, VERSION, LICENSE, BINARY_PACKAGE, URL)
