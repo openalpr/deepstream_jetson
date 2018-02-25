@@ -8,7 +8,35 @@
 # license agreement from NVIDIA Corporation is strictly prohibited.
 #
 ################################################################################
+	
+PKGS = glib-2.0 
+LIBS = -lopenalpr -lalprstream -lvehicleclassifier -lalpropencvgpu
+SOURCES = dsopenalpr_lib.c openalprimpl.cpp
 
-all:
-	gcc -c -o dsopenalpr_lib.o -fPIC dsopenalpr_lib.c `pkg-config --cflags glib-2.0`
-	ar rcs libdsopenalpr.a dsopenalpr_lib.o
+OBJECTS_TMP=$(SOURCES:.cpp=.o)
+OBJECTS=$(OBJECTS_TMP:.c=.o)
+	
+CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LIBDIR) pkg-config --cflags $(PKGS)) -Wall -fPIC  -I/usr/include/alpropencvgpu/
+CXXFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LIBDIR) pkg-config --cflags $(PKGS)) -fPIC -I/usr/include/alpropencvgpu/
+LDFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LIBDIR) pkg-config --libs $(PKGS))
+
+
+all:	print_vars libdsopenalpr.a
+
+print_vars:
+	# echo "CXXFlags: " $(CXXFLAGS) 
+	# echo "LIBS: " $(LIBS) 
+	# echo "LDFLAGS: " $(LDFLAGS) 
+
+libdsopenalpr.a: $(OBJECTS)
+
+	ar rcs libdsopenalpr.a $(OBJECTS)
+
+.cpp.o:
+	$(CXX) -c $(CXXFLAGS) $(LIBS) $(LDFLAGS) $< -o $@
+
+.c.o:
+	$(CC) -c $(CFLAGS)  $(LDFLAGS) $< -o $@
+
+clean:
+	rm -f $(OBJECTS) *.o *.a core
