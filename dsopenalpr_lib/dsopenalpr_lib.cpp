@@ -57,13 +57,6 @@ DsOpenalpr_QueueInput (DsOpenalprCtx * ctx, unsigned char *data)
   DEBUG_PRINTF("DsOpenalpr_QueueInput\n");
   // Queue input. Start processing.
   // Here we just add the input pointer to a queue
-  int arraySize = ctx->init_params.processing_width * ctx->init_params.processing_height * ctx->init_params.processing_channels;
-  std::cout << "1" << std::endl;
-  alprcvgpu::Mat imgData = alprcvgpu::Mat(arraySize, 1, CV_8U, data);
-  std::cout << "2" << std::endl;
-  alprcvgpu::Mat img = imgData.reshape(ctx->init_params.processing_channels, ctx->init_params.processing_height);
-  std::cout << "Image size; " << img.cols << "x" << img.rows << std::endl;
-  alprcvgpu::imwrite("/tmp/test.jpg", img);
   
   ctx->impl->push_cv_mat(data, ctx->init_params.processing_width, 
                          ctx->init_params.processing_height, ctx->init_params.processing_channels);
