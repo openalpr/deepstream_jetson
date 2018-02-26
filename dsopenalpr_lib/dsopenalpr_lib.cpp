@@ -17,8 +17,8 @@
 #include <opencv2/highgui/highgui.hpp>
 #include "openalprimpl.h"
 
-#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
-//#define DEBUG_PRINTF(f_, ...) 
+//#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#define DEBUG_PRINTF(f_, ...) 
 
 
 struct DsOpenalprCtx
