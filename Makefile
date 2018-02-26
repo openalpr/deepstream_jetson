@@ -10,26 +10,25 @@
 ################################################################################
 
 CXX := g++
-SRCS := gstdsexample.cpp
-INCS:= $(wildcard *.h) 
+
+SRCS := gstdsexample.cpp $(wildcard dsopenalpr_lib/*.cpp)
+INCS:= $(wildcard *.h) $(wildcard dsopenalpr_lib/*.h)
 LIB:=libgstnvdsexample.so
 
-DEP:=dsopenalpr_lib/libdsopenalpr.a
-DEP_FILES:=$(wildcard dsopenalpr_lib/*)
-DEP_FILES-=$(DEP)
 
 CFLAGS := -fPIC
 LIBS := -shared -L/usr/lib/aarch64-linux-gnu/tegra -lnvbuf_utils -lgstnvivameta \
-  -Wl,-no-undefined -L dsopenalpr_lib -ldsopenalpr -lEGL \
-  -lalprstream -lopenalpr -lvehicleclassifier -lalpropencvgpu
+  -Wl,-no-undefined -lEGL \
+  -lopenalpr  -lvehicleclassifier -lalprstream 
+
+
 
 CFLAGS+= \
-  -I../nvgstiva-app_sources/nvgstiva-app/includes \
-  -I/usr/include/alpropencvgpu/
+  -I../nvgstiva-app_sources/nvgstiva-app/includes 
 
 OBJS:= $(SRCS:.cpp=.o)
 
-PKGS:= gstreamer-1.0 gstreamer-base-1.0 gstreamer-video-1.0 
+PKGS:= gstreamer-1.0 gstreamer-base-1.0 gstreamer-video-1.0 opencv
 CFLAGS+=$(shell pkg-config --cflags $(PKGS))
 LIBS+=$(shell pkg-config --libs $(PKGS))
 
@@ -39,7 +38,7 @@ all: $(LIB)
 	@echo $(CFLAGS)
 	$(CXX) -c -o $@ $(CFLAGS) $<
 
-$(LIB): $(OBJS) $(DEP) Makefile
+$(LIB): $(OBJS) Makefile
 	@echo $(CFLAGS)
 	$(CXX) -o $@ $(OBJS) $(LIBS)
 
