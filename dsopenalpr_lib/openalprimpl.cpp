@@ -74,7 +74,7 @@ std::vector<alpr::AlprGroupResult> OpenAlprImpl::pop_groups() {
   std::vector<alpr::AlprGroupResult> group_results = m_alprstream.pop_completed_groups();
   
   // If grouping is not enabled, just pop the groups (to clean up memory) and return empty
-  if (grouping_enabled)
+  if (!grouping_enabled)
   {
     std::vector<alpr::AlprGroupResult> empty_group_results;
     return empty_group_results;
