@@ -555,6 +555,8 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
 {
 
 
+  if (output->frame_results.size() == 0)
+    return;
   IvaMeta *ivameta;
   BBOX_Params *bbparams = (BBOX_Params *) g_malloc0 (sizeof (BBOX_Params));
   // Allocate an array of size equal to the number of objects detected
