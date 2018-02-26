@@ -17,6 +17,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
 
+#include <ctime>
 const int GPU_ID = 0;
 
 
@@ -60,7 +61,10 @@ void OpenAlprImpl::disable_grouping() {
 }
 
 std::vector<alpr::AlprResults> OpenAlprImpl::process_batch() {
+  std::cout << "Processing batch" << std::endl;
+  const clock_t begin_time = clock();
   std::vector<alpr::RecognizedFrame> frame_results = m_alprstream.process_batch(&m_alpr);
+  std::cout << "OpenALPR Batch processing time: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC << " sec" << std::endl ;
   
   std::vector<alpr::AlprResults> results;
   for (int i = 0; i < frame_results.size(); i++)
@@ -83,8 +87,11 @@ std::vector<alpr::AlprGroupResult> OpenAlprImpl::pop_groups() {
   // If vehicle classification is enabled, run once for each group
   if (group_results.size() > 0 && m_vehicleclassifier != NULL)
   {
+    const clock_t begin_time = clock();
     for (int i = 0; i < group_results.size(); i++)
       m_alprstream.recognize_vehicle(&group_results[i], m_vehicleclassifier);
+    //std::cout << "OpenALPR vehicle classification time (" << group_results.size() << " vehicles): " << float( clock () - begin_time ) /  CLOCKS_PER_SEC << " sec" << std::endl;
+    
   }
   
   return group_results;
