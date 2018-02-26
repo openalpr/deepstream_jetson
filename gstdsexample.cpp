@@ -468,7 +468,7 @@ gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
       flow_ret = GST_FLOW_ERROR;
       goto done;
     }
-    imwrite("/tmp/blah.jpg", *dsexample->cvmat);
+    
     // Queue the converted buffer for processing
     DsOpenalpr_QueueInput (dsexample->dsexamplelib_ctx, dsexample->cvmat->data);
     // Dequeue the output
