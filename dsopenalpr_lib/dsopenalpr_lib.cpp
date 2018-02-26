@@ -87,30 +87,6 @@ DsOpenalpr_DequeueOutput (DsOpenalprCtx * ctx)
   // Processing finished. Dequeue
 
 
-  // Fill output structure using processed output
-  // Here, we fake some detected objects and labels
-//  if (ctx->init_params.full_frame) {
-//    out->num_objects = 2;
-//    out->object[0] = (DsOpenalpr_Object) {
-//    ctx->init_params.processing_width / 8,
-//          ctx->init_params.processing_height / 8,
-//          ctx->init_params.processing_width / 8,
-//          ctx->init_params.processing_height / 8, "Obj0"};
-//    out->object[1] = (DsOpenalpr_Object) {
-//    ctx->init_params.processing_width / 2,
-//          ctx->init_params.processing_height / 2,
-//          ctx->init_params.processing_width / 8,
-//          ctx->init_params.processing_height / 8, "Obj1"};
-//  } else {
-//    out->num_objects = 1;
-//    out->object[0] = (DsOpenalpr_Object) {
-//    ctx->init_params.processing_width / 8,
-//          ctx->init_params.processing_height / 8,
-//          ctx->init_params.processing_width / 8,
-//          ctx->init_params.processing_height / 8, ""};
-//    g_snprintf (out->object[0].label, 64, "Obj_label");
-//  }
-
   return out;
 }
 
