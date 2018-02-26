@@ -235,7 +235,7 @@ gst_dsexample_start (GstBaseTransform * btrans)
   const char* OPENALPR_CONFIG_FILE = "/etc/openalpr/openalpr.conf"; // empty uses default /etc/openalpr/openalpr.conf
   const char* OPENALPR_RUNTIME_DIR = "/usr/share/openalpr/runtime_data/"; // empty uses default /usr/share/openalpr/runtime_data/
   const char* OPENALPR_LICENSE_KEY = ""; // empty reads value from file in /etc/openalpr/license.conf
-  int OPENALPR_RECOGNIZE_VEHICLES = 1;
+  int OPENALPR_RECOGNIZE_VEHICLES = 0;
   int OPENALPR_GROUP_PLATES_ACROSS_FRAMES = 1;
   
   GstDsExample *dsexample = GST_DSEXAMPLE (btrans);
