@@ -557,12 +557,18 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
 
   if (output->frame_results.size() == 0)
     return;
+    
+  // Calculate how many plates we have in this batch (each frame may have multiple images)
+  int total_meta = 0;
+  for (int i = 0; i < output->frame_results.size(); i++)
+    total_meta += output->frame_results[i].plates.size();
+  
   IvaMeta *ivameta;
   BBOX_Params *bbparams = (BBOX_Params *) g_malloc0 (sizeof (BBOX_Params));
   // Allocate an array of size equal to the number of objects detected
   bbparams->roi_meta =
       (ROIMeta_Params *) g_malloc0 (sizeof (ROIMeta_Params) *
-      output->frame_results.size());
+      total_meta);
   // Should be set to 3 for custom elements
   bbparams->gie_type = 3;
   // Use HW for overlaying boxes
