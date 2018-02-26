@@ -61,7 +61,7 @@ struct _GstDsExample {
   gint conv_dmabuf_fd;
 
   // OpenCV mat to remove padding and convert RGBA to RGB
-  alprcvgpu::Mat *cvmat;
+  cv::Mat *cvmat;
 
   // Input video info (resolution, color format, framerate, etc)
   GstVideoInfo video_info;

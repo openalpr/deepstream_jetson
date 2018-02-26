@@ -22,7 +22,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_dsexample_debug);
 
 static GQuark _ivameta_quark = 0;
 
-using namespace alprcvgpu;
+using namespace cv;
 
 /* Enum to identify properties */
 enum
