@@ -388,7 +388,7 @@ get_converted_mat (GstDsExample * dsexample, int in_dmabuf_fd,
   in_mat =
       Mat (dsexample->processing_height, dsexample->processing_width,
       CV_8UC4, mapped_ptr, buf_params.pitch[0]);
-  cvtColor (in_mat, out_mat, CV_BGRA2BGR);
+  cvtColor (in_mat, out_mat, CV_RGBA2BGR);
 
   // To use the converted buffer in CUDA, create an EGLImage and then use
   // CUDA-EGL interop APIs
