@@ -586,14 +586,19 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
 
     // Compute a rectangular box that fully covers the plate coordinates
     // plate points are topleft, top right, bottom right, bottom left
-    // Expand the box by 5%
-    float MULTIPLIER = 0.05;
+    // Expand the box by 3%
+    float MULTIPLIER = 0.03;
     int left = std::min(alpr_plate.plate_points[0].x, alpr_plate.plate_points[3].x);
+    int top = std::min(alpr_plate.plate_points[0].y, alpr_plate.plate_points[1].y);
+    int right = std::max(alpr_plate.plate_points[1].x, alpr_plate.plate_points[2].x);
+    int bottom = std::max(alpr_plate.plate_points[2].y, alpr_plate.plate_points[3].y);
     left -= (int) (((float)left) * MULTIPLIER);
-    int top = std::min(alpr_plate.plate_points[0].y, alpr_plate.plate_points[1].x);
     top -= (int) (((float)top) * MULTIPLIER);
-    int width = (int) (float(alpr_plate.plate_points[1].x - alpr_plate.plate_points[0].x) * (1 + 2*MULTIPLIER));
-    int height = (int) (float(alpr_plate.plate_points[2].y - alpr_plate.plate_points[1].y) * (1 + 2*MULTIPLIER));
+    right += (int) (((float)right) * MULTIPLIER);
+    bottom += (int) (((float)bottom) * MULTIPLIER);
+    
+    int width = right - left;
+    int height = bottom - top;
     
     
     // Assign bounding box coordinates
