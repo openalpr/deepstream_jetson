@@ -36,8 +36,8 @@ enum
 
 /* Default values for properties */
 #define DEFAULT_UNIQUE_ID 15
-#define DEFAULT_PROCESSING_WIDTH 640
-#define DEFAULT_PROCESSING_HEIGHT 480
+#define DEFAULT_PROCESSING_WIDTH 1280
+#define DEFAULT_PROCESSING_HEIGHT 720
 #define DEFAULT_PROCESS_FULL_FRAME TRUE
 
 /* By default NVIDIA Hardware allocated memory flows through the pipeline. We
@@ -232,8 +232,8 @@ static gboolean
 gst_dsexample_start (GstBaseTransform * btrans)
 {
   const char* OPENALPR_COUNTRY = "us";
-  const char* OPENALPR_CONFIG_FILE = ""; // empty uses default /etc/openalpr/openalpr.conf
-  const char* OPENALPR_RUNTIME_DIR = ""; // empty uses default /usr/share/openalpr/runtime_data/
+  const char* OPENALPR_CONFIG_FILE = "/etc/openalpr/openalpr.conf"; // empty uses default /etc/openalpr/openalpr.conf
+  const char* OPENALPR_RUNTIME_DIR = "/usr/share/openalpr/runtime_data/"; // empty uses default /usr/share/openalpr/runtime_data/
   const char* OPENALPR_LICENSE_KEY = ""; // empty reads value from file in /etc/openalpr/license.conf
   int OPENALPR_RECOGNIZE_VEHICLES = 1;
   int OPENALPR_GROUP_PLATES_ACROSS_FRAMES = 1;
