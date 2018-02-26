@@ -554,7 +554,6 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     gdouble scale_ratio, DsOpenalprOutput * output)
 {
 
-  std::cout << "Attaching metadata" << std::endl;
 
   IvaMeta *ivameta;
   BBOX_Params *bbparams = (BBOX_Params *) g_malloc0 (sizeof (BBOX_Params));
