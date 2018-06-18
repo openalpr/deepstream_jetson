@@ -516,13 +516,14 @@ gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
         // Queue the object crop for processing
         DsOpenalpr_QueueInput (dsexample->dsexamplelib_ctx,
             dsexample->cvmat->data);
-        // Dequeue the output
-        output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
-        // Attach labels for the object
-        attach_metadata_object (dsexample, roi_meta, output);
-        g_free (output);
       }
-    }
+      // Dequeue the output
+      output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
+      // Attach labels for the object
+      //attach_metadata_object (dsexample, roi_meta, output);
+      attach_metadata_full_frame (dsexample, inbuf, scale_ratio, output);
+      g_free (output);
+     }
   }
 
 done:
@@ -553,8 +554,6 @@ static void
 attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     gdouble scale_ratio, DsOpenalprOutput * output)
 {
-
-
   if (output->frame_results.size() == 0)
     return;
     
@@ -577,12 +576,12 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
   static gchar font_name[] = "Arial";
 
   // This example app always assumes batch size of 1, so we iterate over the first (and only) frame
-  
-  for (gint i = 0; i < output->frame_results[0].plates.size(); i++) {
-    alpr::AlprPlateResult alpr_plate = output->frame_results[0].plates[i];
+  for (gint r = 0; r < output->frame_results.size(); r++)
+  for (gint i = 0; i < output->frame_results[r].plates.size(); i++) {
+    const alpr::AlprPlateResult& alpr_plate = output->frame_results[r].plates[i];
     
-    NvOSD_RectParams & rect_params = bbparams->roi_meta[i].rect_params;
-    NvOSD_TextParams & text_params = bbparams->roi_meta[i].text_params;
+    NvOSD_RectParams & rect_params = bbparams->roi_meta[bbparams->num_rects].rect_params;
+    NvOSD_TextParams & text_params = bbparams->roi_meta[bbparams->num_strings].text_params;
 
     // Compute a rectangular box that fully covers the plate coordinates
     // plate points are topleft, top right, bottom right, bottom left
@@ -624,6 +623,8 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     rect_params.height /= scale_ratio;
 
     bbparams->num_rects++;
+
+    //std::cout << "PLATE: " << alpr_plate.bestPlate.characters << std::endl;
 
     // display_text required heap allocated memory
     text_params.display_text = g_strdup (alpr_plate.bestPlate.characters.c_str());
@@ -670,6 +671,9 @@ attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
   
   // Update the appropriate element of the label_info array. Application knows
   // that output of this element is available at index "unique_id".
+
+  //std::cout << "PLATE: " << output->frame_results[0].plates[0].bestPlate.characters << std::endl;
+
   strcpy (roi_meta->label_info[dsexample->unique_id].str_label,
       output->frame_results[0].plates[0].bestPlate.characters.c_str());
   // is_str_label should be set to TRUE indicating that above str_label field is
