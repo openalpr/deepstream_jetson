@@ -24,9 +24,10 @@ const int GPU_ID = 0;
 OpenAlprImpl::OpenAlprImpl(const char* country, const char* config_file, 
         const char* runtime_dir, const char* license_key ) :
   m_alpr(country, config_file, runtime_dir, license_key), 
-  m_alprstream(MAX_FRAME_QUEUE_SIZE, true) 
+  m_alprstream(MAX_FRAME_QUEUE_SIZE, false)
 {
   m_vehicleclassifier = NULL;
+  m_alprstream.set_parked_vehicle_detect_params(false, 0,0,0);
   
   this->config_file = config_file;
   this->runtime_dir = runtime_dir;
@@ -61,10 +62,10 @@ void OpenAlprImpl::disable_grouping() {
 }
 
 std::vector<alpr::AlprResults> OpenAlprImpl::process_batch() {
-  std::cout << "Processing batch" << std::endl;
+//  std::cout << "Processing batch" << std::endl;
   const clock_t begin_time = clock();
   std::vector<alpr::RecognizedFrame> frame_results = m_alprstream.process_batch(&m_alpr);
-  std::cout << "OpenALPR Batch processing time: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC << " sec" << std::endl ;
+//  std::cout << "OpenALPR Batch processing time: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC << " sec" << std::endl ;
   
   std::vector<alpr::AlprResults> results;
   for (int i = 0; i < frame_results.size(); i++)
