@@ -14,6 +14,7 @@
 
 #include <sys/time.h>
 #include <iostream>
+#include <vector>
 
 #define USE_EGLIMAGE 1
 
@@ -81,6 +82,8 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     gdouble scale_ratio, DsOpenalprOutput * output);
 static void attach_metadata_object (GstDsExample * dsexample,
     ROIMeta_Params * roi_meta, DsOpenalprOutput * output);
+static void attach_metadata_object (GstDsExample * dsexample,
+    ROIMeta_Params * roi_meta, const alpr::AlprResults& fr);
 
 /* Install properties, set sink and src pad capabilities, override the required
  * functions of the base class, These are common to all instances of the
@@ -505,6 +508,7 @@ gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
         continue;
       }
       // Iterate through all the objects
+      std::vector<guint> batch;
       for (guint i = 0; i < bbparams->num_rects; i++) {
         ROIMeta_Params *roi_meta = &bbparams->roi_meta[i];
 
@@ -516,12 +520,21 @@ gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
         // Queue the object crop for processing
         DsOpenalpr_QueueInput (dsexample->dsexamplelib_ctx,
             dsexample->cvmat->data);
+
+        batch.push_back(i);
       }
+
       // Dequeue the output
       output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
-      // Attach labels for the object
-      //attach_metadata_object (dsexample, roi_meta, output);
-      attach_metadata_full_frame (dsexample, inbuf, scale_ratio, output);
+
+      assert(batch.size() == output->frame_results.size());
+      // Attach labels for the objects
+      for (guint frame = 0; frame < batch.size(); ++frame) {
+        guint ix_rect = batch[frame];
+
+        attach_metadata_object (dsexample, &bbparams->roi_meta[ix_rect], 
+             output->frame_results[frame]);
+      }
       g_free (output);
      }
   }
@@ -657,7 +670,17 @@ static void
 attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
     DsOpenalprOutput * output)
 {
-  if (output->frame_results.size() == 0 || output->frame_results[0].plates.size() == 0)
+  if (output->frame_results.empty())
+    return;
+
+  attach_metadata_object (dsexample, roi_meta, output->frame_results[0]);
+}
+
+static void
+attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
+    const alpr::AlprResults& fr)
+{
+  if (fr.plates.empty())
     return;
 
   // has_new_info should be set to TRUE whenever adding new/updating
@@ -672,10 +695,10 @@ attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
   // Update the appropriate element of the label_info array. Application knows
   // that output of this element is available at index "unique_id".
 
-  //std::cout << "PLATE: " << output->frame_results[0].plates[0].bestPlate.characters << std::endl;
+  //std::cout << "PLATE: " << fr.plates[0].bestPlate.characters << std::endl;
 
   strcpy (roi_meta->label_info[dsexample->unique_id].str_label,
-      output->frame_results[0].plates[0].bestPlate.characters.c_str());
+      fr.plates[0].bestPlate.characters.c_str());
   // is_str_label should be set to TRUE indicating that above str_label field is
   // valid
   roi_meta->label_info[dsexample->unique_id].is_str_label = 1;
