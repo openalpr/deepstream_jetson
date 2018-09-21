@@ -16,7 +16,7 @@ INCS:= $(wildcard *.h) $(wildcard dsopenalpr_lib/*.h)
 LIB:=libgstnvdsexample.so
 
 
-CFLAGS := -fPIC
+CFLAGS := -fPIC -std=c++11
 LIBS := -shared -L/usr/lib/aarch64-linux-gnu/tegra -lnvbuf_utils -lgstnvivameta \
   -Wl,-no-undefined -lEGL \
   -lopenalpr  -lvehicleclassifier -lalprstream 
