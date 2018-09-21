@@ -15,6 +15,7 @@
 #include <sys/time.h>
 #include <iostream>
 #include <vector>
+#include <deque>
 
 #define USE_EGLIMAGE 1
 
@@ -25,6 +26,23 @@ static GQuark _ivameta_quark = 0;
 
 using namespace cv;
 
+struct cached_entry_t
+{
+  guint tracking_id;
+  NvOSD_RectParams rect_params;
+  alpr::AlprResults result;
+  guint64 frame_num;
+
+  cached_entry_t(const ROIMeta_Params& roi_meta, alpr::AlprResults result_, guint64 frame_num_)
+  : tracking_id(roi_meta.tracking_id), rect_params(roi_meta.rect_params)
+  , result(result_), frame_num(frame_num_)
+  {}
+};
+
+class GstDsExample::cached_results_t : public std::deque<cached_entry_t>
+{
+};
+
 /* Enum to identify properties */
 enum
 {
@@ -34,6 +52,8 @@ enum
   PROP_PROCESSING_HEIGHT,
   PROP_PROCESS_FULL_FRAME,
 };
+
+static const int CACHE_TTL = 10; // Number of frame ticks the entries live in the tracking cache
 
 /* Default values for properties */
 #define DEFAULT_UNIQUE_ID 15
@@ -80,10 +100,10 @@ static GstFlowReturn gst_dsexample_transform_ip (GstBaseTransform *
 static void
 attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
     gdouble scale_ratio, DsOpenalprOutput * output);
-static void attach_metadata_object (GstDsExample * dsexample,
+static bool attach_metadata_object (GstDsExample * dsexample,
     ROIMeta_Params * roi_meta, DsOpenalprOutput * output);
-static void attach_metadata_object (GstDsExample * dsexample,
-    ROIMeta_Params * roi_meta, const alpr::AlprResults& fr);
+static bool attach_metadata_object (GstDsExample * dsexample,
+    ROIMeta_Params * roi_meta, const alpr::AlprResults* fr=nullptr);
 
 /* Install properties, set sink and src pad capabilities, override the required
  * functions of the base class, These are common to all instances of the
@@ -270,6 +290,9 @@ gst_dsexample_start (GstBaseTransform * btrans)
   if (!dsexample->cvmat)
     goto error;
 
+
+  dsexample->cached_results = new GstDsExample::cached_results_t;
+
   return TRUE;
 error:
   if (dsexample->conv_dmabuf_fd)
@@ -289,6 +312,7 @@ gst_dsexample_stop (GstBaseTransform * btrans)
 
   NvBufferDestroy (dsexample->conv_dmabuf_fd);
 
+  delete dsexample->cached_results;
   delete dsexample->cvmat;
 
   // Deinit the algorithm library
@@ -431,6 +455,34 @@ done:
 /**
  * Called when element recieves an input buffer from upstream element.
  */
+
+static bool is_good_crop (const GstDsExample* _this, const ROIMeta_Params& roi_meta)
+{
+  const int CLASSID_CAR = _this->unique_id == DEFAULT_UNIQUE_ID ? 2 : 0; //TODO Hack! Change unique-id in [ds-example] section of the config file to 14 if you're using 2.0 models
+
+  if (roi_meta.class_id != CLASSID_CAR)
+    return false;
+
+  const NvOSD_RectParams& rect = roi_meta.rect_params;
+
+  if (rect.height < 200 || rect.width < 300)
+    return false; // Too small an image to contain a legible LP
+
+
+  return true;
+}
+
+static bool are_consistent(const cached_entry_t& cached, const ROIMeta_Params& roi_meta)
+{
+  if (roi_meta.rect_params.height > cached.rect_params.height*2)
+    return false;
+
+  if (roi_meta.rect_params.height < cached.rect_params.height/2)
+    return false;
+
+  return true;
+}
+
 static GstFlowReturn
 gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
 {
@@ -507,10 +559,45 @@ gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
       if (bbparams->gie_type != 1) {
         continue;
       }
+
+      // Retire stale entries
+      auto& cached_results = *dsexample->cached_results;
+      while (!cached_results.empty()
+           && cached_results.front().frame_num + CACHE_TTL < dsexample->frame_num ) {
+        cached_results.pop_front();
+      }
+
+
       // Iterate through all the objects
       std::vector<guint> batch;
-      for (guint i = 0; i < bbparams->num_rects; i++) {
-        ROIMeta_Params *roi_meta = &bbparams->roi_meta[i];
+      for (guint r = 0; r < bbparams->num_rects; r++) {
+        ROIMeta_Params *roi_meta = &bbparams->roi_meta[r];
+
+        auto cached = std::find_if (
+          cached_results.begin(), cached_results.end(),
+          [&] (const cached_entry_t& x)-> bool
+          { return roi_meta->tracking_id == x.tracking_id; });
+
+        if (cached != cached_results.end()) {
+         //TODO: Move to the head of the queue
+
+          if (are_consistent(*cached, *roi_meta))
+          {
+            cached->rect_params = roi_meta->rect_params;
+
+            attach_metadata_object (dsexample, roi_meta, &cached->result);
+
+            continue;
+          }
+
+          cached_results.erase(cached);
+        }
+
+        if (!is_good_crop(dsexample, *roi_meta))
+        {
+          attach_metadata_object (dsexample, roi_meta);
+          continue;
+        }
 
         // Crop and scale the object
         if (get_converted_mat (dsexample, in_dmabuf_fd, &roi_meta->rect_params,
@@ -521,22 +608,29 @@ gst_dsexample_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
         DsOpenalpr_QueueInput (dsexample->dsexamplelib_ctx,
             dsexample->cvmat->data);
 
-        batch.push_back(i);
+        batch.push_back(r);
       }
 
-      // Dequeue the output
-      output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
+      if (!batch.empty()) {
+        // Dequeue the output
+        DsOpenalprOutput *output = DsOpenalpr_DequeueOutput (dsexample->dsexamplelib_ctx);
 
-      assert(batch.size() == output->frame_results.size());
-      // Attach labels for the objects
-      for (guint frame = 0; frame < batch.size(); ++frame) {
-        guint ix_rect = batch[frame];
+        assert(batch.size() == output->frame_results.size());
+        // Attach labels for the objects
+        for (guint frame = 0; frame < batch.size(); ++frame) {
+          guint ix_rect = batch[frame];
 
-        attach_metadata_object (dsexample, &bbparams->roi_meta[ix_rect], 
-             output->frame_results[frame]);
+          ROIMeta_Params *roi_meta = &bbparams->roi_meta[ix_rect];
+          const auto& results = output->frame_results[frame];
+
+          if (attach_metadata_object (dsexample, roi_meta, &results)) {
+            cached_results.push_back({*roi_meta, results, dsexample->frame_num});
+          }
+        }
+
+        g_free (output);
       }
-      g_free (output);
-     }
+    }
   }
 
 done:
@@ -666,28 +760,25 @@ attach_metadata_full_frame (GstDsExample * dsexample, GstBuffer * inbuf,
  * Only update string label in an existing object metadata. No bounding boxes.
  * We assume only one label per object is generated
  */
-static void
+static bool
 attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
     DsOpenalprOutput * output)
 {
-  if (output->frame_results.empty())
-    return;
-
-  attach_metadata_object (dsexample, roi_meta, output->frame_results[0]);
+  return attach_metadata_object (dsexample, roi_meta,
+    (output && !output->frame_results.empty()) ? &output->frame_results[0] : nullptr);
 }
 
-static void
+static bool
 attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
-    const alpr::AlprResults& fr)
+    const alpr::AlprResults* fr)
 {
-  if (fr.plates.empty())
-    return;
+  std::string LP; assert(LP.empty());
+  bool cache_result = true; // Empty results are cached
 
-  // has_new_info should be set to TRUE whenever adding new/updating
-  // information to LabelInfo
-  roi_meta->has_new_info = TRUE;
-  
-  // The assumption is that there is a single plate on this cropped object (e.g., a single vehicle)
+  if (fr && !fr->plates.empty())
+  {
+
+ // The assumption is that there is a single plate on this cropped object (e.g., a single vehicle)
   // however, this is not always true, because some vehicles may have multiple plates (e.g., European trucks)
   // and sometimes there are false positives, so you could have the true plate read along with a bad one
   // Simply taking the most confident result may be a sufficient, simple approach.
@@ -695,13 +786,22 @@ attach_metadata_object (GstDsExample * dsexample, ROIMeta_Params * roi_meta,
   // Update the appropriate element of the label_info array. Application knows
   // that output of this element is available at index "unique_id".
 
-  //std::cout << "PLATE: " << fr.plates[0].bestPlate.characters << std::endl;
+    const auto& bestPlate = fr->plates[0].bestPlate;
 
-  strcpy (roi_meta->label_info[dsexample->unique_id].str_label,
-      fr.plates[0].bestPlate.characters.c_str());
+    LP = bestPlate.characters;
+    cache_result = bestPlate.overall_confidence > 50;
+  }
+
+  // has_new_info should be set to TRUE whenever adding new/updating
+  // information to LabelInfo
+  roi_meta->has_new_info = TRUE;
+
+  strcpy (roi_meta->label_info[dsexample->unique_id].str_label, LP.c_str());
   // is_str_label should be set to TRUE indicating that above str_label field is
   // valid
   roi_meta->label_info[dsexample->unique_id].is_str_label = 1;
+
+  return cache_result;
 }
 
 /**

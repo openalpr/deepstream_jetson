@@ -75,6 +75,10 @@ struct _GstDsExample {
 
   // Boolean signalling EOS has been recieved by the element.
   gboolean got_eos;
+
+  // Previously processed results
+  class cached_results_t;
+  cached_results_t* cached_results;
 };
 
 // Boiler plate stuff
